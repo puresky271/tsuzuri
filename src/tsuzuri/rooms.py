@@ -6,7 +6,12 @@ card attributed to its speaker, and facts persist into the speaker's memory — 
 for a room flagged ``shared``, into the collective scope every member can recall.
 
 Agents also pass things on: :meth:`Room.share` records a piece of news one agent
-heard so that other agents receive it later as hearsay (``tsuzuri.gossip_runtime``).
+heard; other agents receive it as attributed hearsay in their next prompt (room or 1:1)
+and it is marked delivered once they have seen it (``tsuzuri.gossip_runtime``).
+
+Without an ``llm`` the rule-based fact cards are only echoes of the raw line, so room
+facts are not persisted to long-term memory offline (``room_memory.room_fact_is_writable``);
+the room's own history still carries the conversation.
 """
 from __future__ import annotations
 
@@ -53,8 +58,14 @@ class Room:
         return list(self._load()["history"])
 
     # turn loop --------------------------------------------------------
-    def messages_for(self, agent: str, user_text: str, *, data: dict | None = None) -> list[dict]:
-        """Compiled messages for ``agent``'s reply in this room."""
+    def messages_for(self, agent: str, user_text: str, *, data: dict | None = None,
+                     hearsay: list[dict] | None = None) -> list[dict]:
+        """Compiled messages for ``agent``'s reply in this room (pending hearsay included)."""
+        with self.engine._bound():
+            return self._messages_for(persona_registry.resolve_agent(agent), user_text, data=data, hearsay=hearsay)
+
+    def _messages_for(self, agent: str, user_text: str, *, data: dict | None, hearsay: list[dict] | None,
+                      with_selected: bool = False):
         from tsuzuri.room_memory import build_group_context, room_history_for_workspace
         from tsuzuri.turn_context_workspace import compile_fact_workspace
         from tsuzuri.turn_fact_ledger import select_fact_cards_for_workspace
@@ -67,6 +78,7 @@ class Room:
             select_fact_cards_for_workspace(history, data.get("turn_fact_cards", []), group_mode=True),
             current_character=agent,
             memory_surface=self.engine._render_memory_surface(rows),
+            gossip_records=self.engine._hearsay(agent) if hearsay is None else hearsay,
         )
         others = "、".join(m for m in self.members if m != agent)
         persona = persona_registry.setting("persona_prompts", {}).get(agent, "") or f"你是{agent}。"
@@ -78,16 +90,23 @@ class Room:
         if fact.get("text"):
             messages.append({"role": "system", "content": fact["text"]})
         messages.extend(build_group_context(data["history"], 40, current_character=agent))
+        if with_selected:
+            return messages, [r for r in fact.get("selected_records", []) or [] if isinstance(r, dict)]
         return messages
 
     def say(self, user_text: str, *, speakers: Iterable[str] | None = None) -> RoomTurn:
         """The user speaks; each speaker (default: every member, in order) replies once."""
-        from tsuzuri.room_memory import merge_room_fact_card, room_history_for_workspace, write_room_fact_memory
-        from tsuzuri.turn_fact_ledger import extract_turn_fact_card
-
         text = str(user_text or "").strip()
         if not text:
             raise ValueError("user_text is empty")
+        with self.engine._bound():
+            return self._say(text, speakers)
+
+    def _say(self, text: str, speakers: Iterable[str] | None) -> RoomTurn:
+        from tsuzuri import gossip_runtime
+        from tsuzuri.room_memory import merge_room_fact_card, room_history_for_workspace, write_room_fact_memory
+        from tsuzuri.turn_fact_ledger import extract_turn_fact_card
+
         order = [persona_registry.resolve_agent(s) for s in (speakers or self.members)]
         data = self._load()
         user_entry = {"id": uuid.uuid4().hex, "role": "user", "content": text, "timestamp": int(time.time() * 1000)}
@@ -96,7 +115,11 @@ class Room:
         for agent in order:
             if agent not in self.members:
                 raise ValueError(f"{agent!r} is not in this room")
-            reply = str((self.engine.reply_fn or offline_reply)(self.messages_for(agent, text, data=data)) or "").strip() or "……"
+            messages, selected = self._messages_for(agent, text, data=data, hearsay=None, with_selected=True)
+            reply = str((self.engine.reply_fn or offline_reply)(messages) or "").strip() or "……"
+            for row in selected:
+                if row.get("source_channel") == "gossip" and row.get("source_ref_id"):
+                    gossip_runtime.mark_delivered(str(row["source_ref_id"]), agent, store=self.engine.store)
             entry = {
                 "id": uuid.uuid4().hex, "role": "assistant", "content": reply, "character": agent,
                 "timestamp": int(time.time() * 1000),
@@ -128,19 +151,22 @@ class Room:
         """
         from tsuzuri import gossip_runtime
 
-        source = persona_registry.resolve_agent(source_agent)
-        graph = {
-            a: {b: {"trust": trust, "info_sharing": 1.0 if b in self.members else 0.0} for b in persona_registry.agent_names()}
-            for a in self.members
-        }
-        return gossip_runtime.record_fanout(source, text, graph=graph, store=self.engine.store,
-                                            rng=lambda: 1e-9)  # any non-zero edge spreads; info_sharing=0 never does
+        with self.engine._bound():
+            source = persona_registry.resolve_agent(source_agent)
+            graph = {
+                a: {b: {"trust": trust, "info_sharing": 1.0 if b in self.members else 0.0}
+                    for b in persona_registry.agent_names()}
+                for a in self.members
+            }
+            return gossip_runtime.record_fanout(source, text, graph=graph, store=self.engine.store,
+                                                rng=lambda: 1e-9)  # any non-zero edge spreads; info_sharing=0 never does
 
     def hearsay_for(self, agent: str, limit: int = 3) -> list[dict]:
         """Pending second-hand news ``agent`` has heard and not yet mentioned."""
         from tsuzuri import gossip_runtime
 
-        return gossip_runtime.get_pending_for(persona_registry.resolve_agent(agent), limit, store=self.engine.store)
+        with self.engine._bound():
+            return gossip_runtime.get_pending_for(persona_registry.resolve_agent(agent), limit, store=self.engine.store)
 
 
 __all__ = ["Room", "RoomTurn"]

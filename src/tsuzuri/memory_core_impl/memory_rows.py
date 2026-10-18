@@ -539,6 +539,21 @@ _EXPLICIT_MEMORY_WRITE_RE = re.compile(
     r"我叫|叫我|一直都很爱你们|很爱你们|爱你们)"
 )
 _COLLECTIVE_ADDRESS_RE = live_pattern(r"(你们|大家|{COLLECTIVE}|{COLLECTIVE_LOWER}|全员|{COLLECTIVE_NOUN}|我们几个|你们几个)")
+# 用户明确要求保密 / 别外传的原话（2026-10-19 外部审计 COMP-004）：这类句子
+# 不得升 collective、不得进跨角色 digest、不得 gossip 扩散——否则「先别告诉某成员」
+# 恰好被共享给那位成员。宁可漏写一条集体记忆，也不把秘密写进共享层。
+_USER_CONFIDENTIAL_RE = re.compile(
+    r"(?:别|不要|不许|不能|千万别|先别|暂时别|还别|先不要|暂时不要)"
+    r"(?:告诉|透露|说出去|讲出去|外传|声张|张扬|让[^，。！？!?\n]{1,12}?知道|"
+    r"(?:跟|和|对|向|给)[^，。！？!?\n]{1,12}?(?:说|讲|提|透露))"
+    r"|保密|替我瞒|帮我瞒|先瞒着|瞒着[^，。！？!?\n]{1,12}|你知我知"
+    r"|只(?:跟|和|对)你(?:一个人)?(?:说|讲)|只告诉你|就告诉你一个"
+    r"|(?:这|这个|这件事)是(?:个|我的)?秘密|是秘密|秘密哦|秘密喔|秘密啦|偷偷告诉你"
+)
+
+
+def _user_text_requests_confidentiality(text: str) -> bool:
+    return bool(_USER_CONFIDENTIAL_RE.search(str(text or "")))
 _ASSISTANT_ONLY_FACT_RE = re.compile(r"^(我觉得|我想|我会|我能|我可以|我应该|我记得|角色|她|她们)")
 
 

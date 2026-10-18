@@ -7,6 +7,7 @@ Never commit it.
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -84,10 +85,20 @@ def load_project_secrets(project_root: str | os.PathLike[str] | None = None) -> 
     return payload if isinstance(payload, dict) else {}
 
 
+_LLM_SETTING = re.compile(r"^(?:LLM_|OPENAI_)|_API_KEY$|_BASE_URL$")
+
+
+def _offline() -> bool:
+    """``Tsuzuri(llm=None)`` sets TSUZURI_OFFLINE for each call: LLM settings stay unread."""
+    return os.environ.get("TSUZURI_OFFLINE", "") == "1"
+
+
 def get_secret(name: str, default: Any = "", *, env_first: bool = True) -> Any:
     """Read one top-level setting, with environment variables taking priority."""
     key = str(name or "").strip()
     if not key:
+        return default
+    if _offline() and _LLM_SETTING.search(key):
         return default
     if env_first and key in os.environ:
         return os.environ[key]
@@ -114,6 +125,8 @@ def sync_env_from_secrets(project_root: str | os.PathLike[str] | None = None, *,
         if isinstance(raw, (dict, list)) or raw is None:
             continue
         if key not in _RUNTIME_ENV_KEYS and not key.startswith(("MEM_", "LLM_", "TSUZURI_")):
+            continue
+        if _offline() and _LLM_SETTING.search(key):
             continue
         value = str(raw).strip()
         if value and (overwrite or key not in os.environ):

@@ -127,6 +127,18 @@ def configure_personas(overrides: Mapping | None = None, *, reset: bool = False)
         return copy.deepcopy(_state["config"])
 
 
+def export_personas() -> dict:
+    """The active cast as a plain mapping (round-trips through :func:`restore_personas`)."""
+    return _denormalize(_config())
+
+
+def restore_personas(snapshot: Mapping) -> None:
+    """Make ``snapshot`` (from :func:`export_personas`) the active cast exactly, without merging."""
+    with _lock:
+        _state["config"] = _normalize(copy.deepcopy(dict(snapshot)))
+        _state["generation"] += 1
+
+
 def generation() -> int:
     _config()
     return int(_state["generation"])
@@ -424,7 +436,7 @@ def live_pattern(template: str, flags: int = 0) -> LivePattern:
 
 
 __all__ = [
-    "configure_personas", "generation",
+    "configure_personas", "export_personas", "restore_personas", "generation",
     "agent_names", "default_agent", "resolve_agent", "is_agent",
     "collective_scope", "collective_label", "collective_noun", "collective_keywords",
     "agent_aliases", "agent_set_view", "agent_alias_view", "text_variants", "fold_text_variants",

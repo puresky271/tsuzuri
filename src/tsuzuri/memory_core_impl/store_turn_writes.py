@@ -14,7 +14,7 @@ from tsuzuri.memory_core_impl.config import _safe_float, _utc_now_iso
 from tsuzuri.memory_core_impl.memory_rows import (
     _ASSISTANT_ONLY_FACT_RE, _EXPLICIT_MEMORY_WRITE_RE, _lexical_similarity,
     _memory_row_is_surfaceable_working, _norm_text, _PATH4_CHITCHAT_FACT_RE,
-    _PATH4_ONESHOT_PROMISE_RE, _PATH4_TRANSIENT_DAILY_RE,
+    _PATH4_ONESHOT_PROMISE_RE, _PATH4_TRANSIENT_DAILY_RE, _user_text_requests_confidentiality,
 )
 from tsuzuri.memory_core_impl.features import (
     _canonicalize_developer_fact, _compute_typed_score, _dedupe_short_strings,
@@ -404,6 +404,9 @@ class _TurnWritesMixin:
             # 写 collective 会让 KAIROS dream 误判为「group 一起做某事」、污染集体记忆。
             _meta_channel = str(meta.get("channel", "") or "").strip().lower()
             if _coll_should_write and _meta_channel == "line":
+                _coll_should_write = False
+            # 「先别告诉 X 和 Y」点名了 2+ 成员，旧逻辑反而把这句写进 X/Y 可读的共享层
+            if _coll_should_write and _user_text_requests_confidentiality(latest_user_msg):
                 _coll_should_write = False
             if _coll_should_write:
                 if True:  # 保留缩进（旧 if 长度 >= 10 块）

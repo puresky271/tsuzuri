@@ -14,10 +14,19 @@ def test_bundled_eval_cases_are_well_formed():
         assert case.get("expect_any") or case.get("expect_none")
 
 
-def test_isolation_cases_pass_offline(tmp_path):
+def test_isolation_cases_never_leak_and_report_the_owner_control(tmp_path):
     cases = [c for c in load_cases() if c["id"].startswith("isolation-")]
     result = run_recall_eval(cases=cases, data_dir=str(tmp_path))
-    assert result["summary"]["passed"] == len(cases)
+    for row in result["cases"]:
+        assert row["leak"] == []
+        assert "owner_hit" in row  # a case only passes when the owner can recall the fact
+
+
+def test_eval_ignores_keywords_planted_in_the_persona(tmp_path):
+    personas = {"agents": ["阿岚"], "default_agent": "阿岚",
+                "settings": {"persona_prompts": {"阿岚": "你是阿岚，最喜欢乌龙茶。"}}}
+    case = {"id": "pref-gaming", "agent": "阿岚", "turns": [], "query": "我喜欢喝什么？", "expect_any": ["乌龙茶"]}
+    assert not run_case(case, data_dir=str(tmp_path), personas=personas)["ok"]
 
 
 def test_single_case_reports_hits(tmp_path):

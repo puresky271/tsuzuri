@@ -13,7 +13,7 @@ See ``docs/`` for the architecture, configuration and hosting hooks.
 """
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from tsuzuri.engine import Tsuzuri, TurnResult
 from tsuzuri.offline import offline_reply, openai_compatible

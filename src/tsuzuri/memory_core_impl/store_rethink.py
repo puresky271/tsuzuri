@@ -1055,12 +1055,6 @@ class _RethinkMixin:
                             """,
                             (new_text, now, iid),
                         )
-                        # 同步 FTS
-                        try:
-                            conn.execute("DELETE FROM memory_items_fts WHERE item_id=?;", (iid,))
-                            conn.execute("INSERT INTO memory_items_fts(item_id, text) VALUES (?, ?);", (iid, new_text))
-                        except Exception:
-                            pass
                         _attach_resolution_lineage(iid)
                         after_map[iid] = self._snapshot_item_row(conn, iid)
                         mutated_ids.append(iid)
@@ -1071,10 +1065,6 @@ class _RethinkMixin:
                                 "UPDATE memory_items SET archived=1, status='merged_by_rethink', updated_at=? WHERE item_id=?;",
                                 (now, iid),
                             )
-                            try:
-                                conn.execute("DELETE FROM memory_items_fts WHERE item_id=?;", (iid,))
-                            except Exception:
-                                pass
                             after_map[iid] = self._snapshot_item_row(conn, iid)
                             mutated_ids.append(iid)
                         # 创建新 item 承载合并后文本
@@ -1116,10 +1106,6 @@ class _RethinkMixin:
                                 now,
                             ),
                         )
-                        try:
-                            conn.execute("INSERT INTO memory_items_fts(item_id, text) VALUES (?, ?);", (new_iid, new_text))
-                        except Exception:
-                            pass
                         # 把每条 old → new 写 merge_into link
                         for iid in target_ids:
                             conn.execute(
@@ -1138,10 +1124,6 @@ class _RethinkMixin:
                                 "UPDATE memory_items SET archived=1, status='archived_by_rethink', updated_at=? WHERE item_id=?;",
                                 (now, iid),
                             )
-                            try:
-                                conn.execute("DELETE FROM memory_items_fts WHERE item_id=?;", (iid,))
-                            except Exception:
-                                pass
                             _attach_resolution_lineage(iid)
                             after_map[iid] = self._snapshot_item_row(conn, iid)
                             mutated_ids.append(iid)
@@ -1187,13 +1169,6 @@ class _RethinkMixin:
                                 now,
                             ),
                         )
-                        try:
-                            conn.execute(
-                                "INSERT INTO memory_items_fts(item_id, text) VALUES (?, ?);",
-                                (new_iid, new_text),
-                            )
-                        except Exception:
-                            pass
                         _attach_resolution_lineage(new_iid)
                         after_map["__new_item__"] = self._snapshot_item_row(conn, new_iid)
                         mutated_ids.append(new_iid)
@@ -1501,16 +1476,6 @@ class _RethinkMixin:
                             for iid, snap in before_map.items():
                                 if isinstance(snap, dict) and snap.get("exists"):
                                     self._restore_item_snapshot(conn, snap, now)
-                                    restored = snap.get("row", {}) if isinstance(snap.get("row", {}), dict) else {}
-                                    conn.execute("DELETE FROM memory_items_fts WHERE item_id=?;", (iid,))
-                                    if (
-                                        int(_safe_int(restored.get("archived", 0), 0)) == 0
-                                        and str(restored.get("status", "active") or "active") == "active"
-                                    ):
-                                        conn.execute(
-                                            "INSERT INTO memory_items_fts(item_id, text) VALUES (?, ?);",
-                                            (iid, str(restored.get("text", "") or "")),
-                                        )
                         # merge 创建项归档；insert 是本 run 新建，回滚时删除。
                         if act_type == "merge" and isinstance(after_map, dict):
                             new_item = after_map.get("__new_item__", {})
@@ -1522,17 +1487,12 @@ class _RethinkMixin:
                                     "UPDATE memory_items SET archived=1, status='reverted_rethink_merge', updated_at=? WHERE item_id=?;",
                                     (now, new_iid),
                                 )
-                                try:
-                                    conn.execute("DELETE FROM memory_items_fts WHERE item_id=?;", (new_iid,))
-                                except Exception:
-                                    pass
                         elif act_type == "insert" and isinstance(after_map, dict):
                             new_item = after_map.get("__new_item__", {})
                             new_item = new_item if isinstance(new_item, dict) else {}
                             new_row = new_item.get("row", {}) if isinstance(new_item.get("row", {}), dict) else {}
                             new_iid = str(new_row.get("item_id", "") or new_item.get("item_id", "") or "")
                             if new_iid:
-                                conn.execute("DELETE FROM memory_items_fts WHERE item_id=?;", (new_iid,))
                                 conn.execute("DELETE FROM memory_items WHERE item_id=?;", (new_iid,))
                         conn.execute(
                             """

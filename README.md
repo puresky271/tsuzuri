@@ -32,11 +32,11 @@ tsuzuri (綴り, "stitching together") is a long-term memory layer and context c
 **Core capabilities:**
 
 - **Layered memory per agent**: working → episodic → semantic, plus procedural rules and a *collective* scope shared by the cast. Writes are rule-planned — an LLM never writes rows directly.
-- **Hybrid recall**: lexical/FTS, optional dense and sparse vectors, structured slots, correction resolution, reranking and MMR, with ACT-R style decay.
-- **Turn facts**: every exchange becomes a fact card (facts, state changes, commitments, corrections, open threads) that carries the conversation across sessions and supersedes stale claims.
-- **Context compiler**: selects, de-duplicates and budgets current state, relevant facts, recalled memory, conversation arc and evidence, and places a per-turn execution packet where the model attends most.
-- **Consolidation ("dreaming")**: promote and decay, rethink semantic facts against new evidence, cluster episodes into event/topic narratives, rebuild a core summary and an entity projection, scan for forgetting.
-- **Multi-party memory**: rooms with speaker-attributed shared history, room-level fact cards, a shared collective scope, and hearsay that spreads between agents with decaying confidence.
+- **Recall**: a recency window, an FTS5 + jieba keyword lane and optional dense vectors, fused with ACT-R style decay, correction resolution and MMR. The pluggable `hybrid_v2` provider adds sparse vectors, structured slots and cross-encoder reranking for hosts that call it.
+- **Turn facts**: every exchange becomes a fact card (facts, state changes, commitments, corrections, open threads). An explicit self-correction ("说错了，我的猫叫豆包") supersedes the earlier claim — reviewed by your LLM, or by rules offline — and retires the long-term rows written from it.
+- **Context compiler**: selects, de-duplicates and budgets relevant facts, recalled memory and hearsay, and places a per-turn execution packet where the model attends most. Richer frames (world state, the user's ongoing states, conversation arc, evidence) are host-level compilers you fill with your application's state.
+- **Consolidation ("dreaming")**: promote and decay, rethink semantic facts against new evidence, cluster episodes into event/topic narratives, rebuild a core summary and an entity projection, scan for forgetting — conservative by default (a shadow week for evolution, dry-run for destructive steps).
+- **Multi-party memory**: rooms with speaker-attributed shared history, room-level fact cards, a shared collective scope, and hearsay that reaches other agents' prompts with decaying confidence. Confidential remarks ("先别告诉她") never enter the shared scope.
 
 **Applications:**
 
@@ -61,7 +61,11 @@ git clone https://github.com/puresky271/tsuzuri.git && cd tsuzuri
 pip install -e .                 # core: numpy, scipy, jieba
 pip install -e ".[llm]"          # + OpenAI-compatible client
 pip install -e ".[embeddings]"   # + dense recall (large model download)
+pip install -e ".[dev]"          # + tests and lint
 ```
+
+> [!NOTE]
+> tsuzuri is not on PyPI yet; install from source. The API may change before 1.0.
 
 > [!TIP]
 > `tsuzuri demo` runs a scripted conversation, a recall check and a group room — no API key, no downloads.
@@ -145,18 +149,28 @@ tsuzuri eval                       # recall evaluation
 | Upcoming plans | 0/3 | 1/3 |
 | Stable facts | 1/2 | 2/2 |
 | Corrections (newest wins) | 1/2 | 1/2 |
-| Isolation (no leak to other agents) | 2/2 | 2/2 |
+| Isolation (no leak, owner still recalls) | 1/2 | 2/2 |
 | Group rooms | 2/2 | 2/2 |
 | Hearsay | 1/1 | 1/1 |
 | Multi-turn threads | 0/1 | 1/1 |
-| **Total** | **8/16 (50%)** | **11/16 (69%)** |
+| **Total** | **7/16 (44%)** | **11/16 (69%)** |
 
 Bundled synthetic set v1, probes asked in a **new session** (no transcript, no session fact cards — only long-term memory can answer), rule-based extraction, no LLM. LLM extraction is not included in these numbers. Reproduce with `tsuzuri eval` and `tsuzuri eval --embeddings`.
 
 > [!NOTE]
 > The offline numbers measure lexical recall alone: a fact comes back when the question shares words with it ("面试" ↔ "面试"), not when it only shares meaning ("我下周三要做什么" ↔ "面试"). Dense embeddings and an LLM extractor close much of that gap; measure your own configuration on your own cases.
 
+> [!WARNING]
+> This is a 16-case *visibility* check (is the expected text in what the model reads?), not end-to-end answer accuracy, and it is not comparable to LoCoMo/LongMemEval scores. The persona prompt does not count, hearsay must reach the compiled context, and isolation cases also require the owner to recall the fact.
+
 Format and methodology: [docs/evaluation.md](docs/evaluation.md).
+
+### Known limitations
+
+- **Natural follow-ups after a few days.** The surface plan is tuned to stay silent unless a memory is clearly relevant; without an explicit "do you remember…", a question three days later often grounds silently instead of surfacing the fact. Dense embeddings help; thresholds are not yet configurable per deployment.
+- **Offline extraction is an echo.** Without an LLM, fact cards restate the user's line; commitments and open threads are not extracted, and room facts are not persisted to long-term memory (the room history still carries them).
+- **One user per store.** Several engines can share a process, but calls are serialized and the schema has no tenant column.
+- **No hard delete or export API yet.** Archiving and forgetting keep provenance; remove the data directory to erase a user's data.
 
 ## How it works
 
@@ -196,7 +210,7 @@ Details in [docs/architecture.md](docs/architecture.md).
   title  = {tsuzuri: Long-term conversational memory and a context compiler for multi-agent character chat},
   author = {{tsuzuri contributors}},
   year   = {2026},
-  version = {0.1.0},
+  version = {0.1.1},
   url    = {https://github.com/puresky271/tsuzuri},
   license = {Apache-2.0}
 }

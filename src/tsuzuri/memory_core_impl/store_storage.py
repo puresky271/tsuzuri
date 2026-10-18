@@ -33,6 +33,8 @@ class _StorageMixin:
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
         conn.execute("PRAGMA foreign_keys=ON;")
+        # INSERT OR REPLACE 删除旧行时也要触发 FTS 同步 trigger
+        conn.execute("PRAGMA recursive_triggers=ON;")
         self._maybe_quick_check_connection()
         return conn
 
@@ -297,6 +299,7 @@ class _StorageMixin:
                     """)
                 except Exception:
                     pass  # FTS5 may not be available in all SQLite builds
+                self._ensure_memory_items_fts_triggers(conn)
 
 
                 conn.execute(

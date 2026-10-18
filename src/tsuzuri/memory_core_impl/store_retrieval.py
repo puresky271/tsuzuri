@@ -56,6 +56,16 @@ from tsuzuri.memory_core_impl.meta_policy import (
 )
 from tsuzuri.persona_registry import collective_scope, resolve_agent
 
+
+def _fts5_quoted_query(text: str) -> str:
+    """Turn free text into an FTS5 MATCH expression that cannot be a syntax error.
+
+    原文直接进 MATCH 会被引号/+/-/: 当成查询语法报错；按空白切开逐段加引号，
+    保留裸查询的隐式 AND 语义。
+    """
+    return " ".join('"' + part.replace('"', '""') + '"' for part in str(text or "").split())
+
+
 class _RetrievalMixin:
     """Memory read planning, retrieval and context packs."""
 
@@ -744,23 +754,25 @@ class _RetrievalMixin:
             try:
                 # Try FTS5 pre-filter if query_text is provided
                 fts_ids: set[str] = set()
-                if search_texts:
+                # FTS search for items containing query keywords
+                for _search in search_texts:
+                    if len(_search) < 2:
+                        continue
+                    _fts_query = _fts5_quoted_query(_search)
+                    if not _fts_query:
+                        continue
                     try:
-                        # FTS search for items containing query keywords
-                        for _search in search_texts:
-                            if len(_search) < 2:
-                                continue
-                            fts_rows = conn.execute(
-                                """SELECT f.item_id FROM memory_items_fts AS f
-                                   JOIN memory_items AS m ON m.item_id=f.item_id
-                                   WHERE f.text MATCH ?
-                                     AND COALESCE(m.item_type, '') NOT IN ('event_cluster', 'topic_cluster')
-                                   LIMIT ?""",
-                                (_search, lim * 2),
-                            ).fetchall()
-                            fts_ids.update(str(r[0]) for r in fts_rows)
+                        fts_rows = conn.execute(
+                            """SELECT f.item_id FROM memory_items_fts AS f
+                               JOIN memory_items AS m ON m.item_id=f.item_id
+                               WHERE f.text MATCH ?
+                                 AND COALESCE(m.item_type, '') NOT IN ('event_cluster', 'topic_cluster')
+                               LIMIT ?""",
+                            (_fts_query, lim * 2),
+                        ).fetchall()
+                        fts_ids.update(str(r[0]) for r in fts_rows)
                     except Exception:
-                        pass  # FTS table may not exist or be empty
+                        continue  # FTS table may not exist (SQLite without FTS5)
 
                 rows = conn.execute(
                     """

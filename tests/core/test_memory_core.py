@@ -172,10 +172,6 @@ class MemoryCoreTests(unittest.TestCase):
                     "",
                 ),
             )
-            try:
-                conn.execute("INSERT OR REPLACE INTO memory_items_fts(item_id, text) VALUES (?, ?);", (item_id, text))
-            except Exception:
-                pass
             conn.commit()
         finally:
             conn.close()
@@ -3126,6 +3122,43 @@ class CanonExtractionShapeTests(unittest.TestCase):
 
         self.assertNotIn("张三因", summary)
         self.assertTrue(summary.startswith("阿澈"), summary)
+
+    def test_cluster_summarizer_failure_skips_instead_of_placeholder(self):
+        # 2026-10-19 审计 LIFE-016：无 key / LLM 空返回 / 调用异常都返回空串（caller 跳过该簇），
+        # 不再把「[聚类 N 条相似事] + 首条原话」当 semantic 摘要写库。
+        member_items = [{"text": "阿澈说：周末想去看海"}, {"text": "阿澈说：海边的风很舒服"}]
+
+        class _EmptyMessage:
+            content = ""
+
+        class _EmptyChoice:
+            message = _EmptyMessage()
+
+        class _EmptyResponse:
+            choices = [_EmptyChoice()]
+
+        class _Completions:
+            raise_error = False
+
+            @classmethod
+            def create(cls, **_kwargs):
+                if cls.raise_error:
+                    raise RuntimeError("upstream 500")
+                return _EmptyResponse()
+
+        class _Chat:
+            completions = _Completions
+
+        class _FakeOpenAI:
+            def __init__(self, **_kwargs):
+                self.chat = _Chat()
+
+        with patch.dict(os.environ, {"LLM_API_KEY": ""}, clear=False):
+            self.assertEqual(self.core._default_cluster_summarizer(member_items, "张三"), "")
+        with patch.dict(os.environ, {"LLM_API_KEY": "unit-key"}, clear=False),                 patch("openai.OpenAI", _FakeOpenAI):
+            self.assertEqual(self.core._default_cluster_summarizer(member_items, "张三"), "")
+            _Completions.raise_error = True
+            self.assertEqual(self.core._default_cluster_summarizer(member_items, "张三"), "")
 
     def test_prune_stale_shared_info_marks_undelivered_old_rows(self):
         # 2026-08-27 §9-1：超 48h 窗口仍零投递的 shared_info 行置 expired=1；

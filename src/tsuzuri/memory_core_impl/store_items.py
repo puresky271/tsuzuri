@@ -98,6 +98,59 @@ class _ItemsMixin:
         model["updated_at"] = now
         return True
 
+    # memory_items_fts 是 external-content 表（content_rowid=rowid），索引必须按 rowid
+    # 对齐。2026-10-19 前各写入方手写 `INSERT INTO memory_items_fts(item_id, text)`
+    # 不带 rowid、`DELETE ... WHERE item_id=?` 又按当前内容删旧词，索引漂移出孤儿
+    # rowid，MATCH 抛 "fts5: missing row" 后整条 FTS 通道被静默吞掉。现由 trigger
+    # 统一维护：只索引 active 且非空文本的行，与 _rebuild_memory_items_fts_for_active 一致。
+    _FTS_ROW_INDEXED = "{r}.archived=0 AND {r}.status='active' AND COALESCE({r}.text, '') != ''"
+    _MEMORY_ITEMS_FTS_TRIGGERS = (
+        (
+            "memory_items_fts_ai",
+            "AFTER INSERT ON memory_items BEGIN "
+            "INSERT INTO memory_items_fts(rowid, item_id, text) "
+            "SELECT new.rowid, new.item_id, new.text WHERE " + _FTS_ROW_INDEXED.format(r="new") + "; END",
+        ),
+        (
+            "memory_items_fts_ad",
+            "AFTER DELETE ON memory_items BEGIN "
+            "INSERT INTO memory_items_fts(memory_items_fts, rowid, item_id, text) "
+            "SELECT 'delete', old.rowid, old.item_id, old.text WHERE " + _FTS_ROW_INDEXED.format(r="old") + "; END",
+        ),
+        (
+            "memory_items_fts_au",
+            "AFTER UPDATE OF item_id, text, archived, status ON memory_items BEGIN "
+            "INSERT INTO memory_items_fts(memory_items_fts, rowid, item_id, text) "
+            "SELECT 'delete', old.rowid, old.item_id, old.text WHERE " + _FTS_ROW_INDEXED.format(r="old") + "; "
+            "INSERT INTO memory_items_fts(rowid, item_id, text) "
+            "SELECT new.rowid, new.item_id, new.text WHERE " + _FTS_ROW_INDEXED.format(r="new") + "; END",
+        ),
+    )
+
+    def _ensure_memory_items_fts_triggers(self, conn: sqlite3.Connection) -> bool:
+        """Install the FTS sync triggers; rebuild the index once when they are new."""
+        try:
+            if not conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_items_fts';"
+            ).fetchone():
+                return False
+            existing = {
+                str(r[0])
+                for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='memory_items';"
+                ).fetchall()
+            }
+            missing = [(name, body) for name, body in self._MEMORY_ITEMS_FTS_TRIGGERS if name not in existing]
+            if not missing:
+                return False
+            for name, body in missing:
+                conn.execute(f"CREATE TRIGGER IF NOT EXISTS {name} {body};")
+            # 旧索引是手写同步留下的、rowid 不可信：装 trigger 时整体重建一次。
+            return self._rebuild_memory_items_fts_for_active(conn)
+        except Exception as exc:
+            _tsz_emit(f"[MemoryCore][FTS] trigger install failed: {exc}", flush=True)
+            return False
+
     def _rebuild_memory_items_fts_for_active(self, conn: sqlite3.Connection) -> bool:
         try:
             conn.execute("INSERT INTO memory_items_fts(memory_items_fts) VALUES('delete-all');")
@@ -169,10 +222,6 @@ class _ItemsMixin:
                 """,
                 (_json_dumps(payload), now_iso, item_id),
             )
-            try:
-                conn.execute("DELETE FROM memory_items_fts WHERE item_id=?;", (item_id,))
-            except Exception:
-                pass
             archived += 1
         return archived
 
@@ -1081,15 +1130,7 @@ class _ItemsMixin:
                         str(row.get("topic_labels_json", "[]") or "[]"),
                     ),
                 )
-            # Sync FTS5 index (best-effort)
-            if sync_fts and write_cursor.rowcount != 0:
-                try:
-                    db.execute(
-                        "INSERT OR REPLACE INTO memory_items_fts(item_id, text) VALUES (?, ?)",
-                        (str(row["item_id"]), str(row["text"])),
-                    )
-                except Exception:
-                    pass
+            # FTS5 索引由 memory_items 上的 trigger 同步；sync_fts 仅为兼容旧调用保留。
 
         if conn is not None:
             with self._lock:

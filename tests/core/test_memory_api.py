@@ -68,11 +68,8 @@ class _MemoryApiTestBase(unittest.TestCase):
     def _fts_match(self, phrase: str) -> bool:
         """召回路径同款 MATCH 查询（:8137）。
 
-        注意：memory_items_fts 是 external-content 表，而 in-house 写入不带 rowid
-        （_upsert_item INSERT OR REPLACE :6071 / rethink DELETE+INSERT :12605），
-        索引存在 phantom rowid 的既有 quirks，生产 MATCH 靠 try/except 兜底（:8141）。
-        因此本 helper 先 'rebuild' 让索引重镜像内容表，消除环境噪音后再断言——
-        测的是「更新后新文本可被召回 MATCH 到」这一契约，而非索引内部机制。
+        memory_items_fts 由 memory_items 上的 trigger 按 rowid 同步（2026-10-19），
+        这里直接查索引、不再先 'rebuild'：测的就是更新路径本身有没有把新文本同步进去。
         LIKE 不可用：对 external-content 表全表 LIKE 直接读内容列，验证不到索引。
         """
         conn = sqlite3.connect(self.db_path)
@@ -82,7 +79,6 @@ class _MemoryApiTestBase(unittest.TestCase):
             ).fetchone()
             if not row:
                 self.skipTest("SQLite build 无 FTS5")
-            conn.execute("INSERT INTO memory_items_fts(memory_items_fts) VALUES('rebuild')")
             hits = conn.execute(
                 'SELECT item_id FROM memory_items_fts WHERE text MATCH ?', (f'"{phrase}"',)
             ).fetchall()
@@ -439,9 +435,9 @@ class MemoryApiDeleteTests(_MemoryApiTestBase):
         self.assertIsNotNone(row)                    # 物理行仍在（无硬删除）
         self.assertEqual(int(row["archived"]), 1)
         self.assertEqual(row["status"], "archived")
-        # FTS 维护与上游一致为 best-effort（external-content 表 + 无 rowid 写入的既有
-        # quirks，见 _fts_match 注释）；软删后内容行仍在，索引可经 rebuild 重镜像，
-        # 召回侧由 archived=0 AND status='active' 过滤（下方列表断言覆盖该契约）。
+        # 软删后内容行仍在，但 trigger 已把它移出 FTS 索引；召回侧另由
+        # archived=0 AND status='active' 过滤（下方列表断言覆盖该契约）。
+        self.assertFalse(self._fts_match("要删的语义记忆"))
         ids = {it["item_id"] for it in self.api.list_memories("张三")["items"]}
         self.assertNotIn("d-1", ids)
         ids_arch = {it["item_id"] for it in self.api.list_memories("张三", include_archived=True)["items"]}

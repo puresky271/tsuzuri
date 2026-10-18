@@ -245,7 +245,11 @@ def get_model():
         try:
             from sentence_transformers import SentenceTransformer
             model_name = os.getenv("EMBEDDING_MODEL", _DEFAULT_MODEL).strip() or _DEFAULT_MODEL
-            _model_instance = SentenceTransformer(model_name)
+            try:
+                _model_instance = SentenceTransformer(model_name)
+            except Exception:
+                # Hub unreachable (offline / broken proxy) while the model is already cached
+                _model_instance = SentenceTransformer(model_name, local_files_only=True)
             _model_last_fail = 0.0  # clear failure state on success
             _tsz_emit(f"[Embedding] loaded {model_name} (dim={_EMBEDDING_DIM})")
             return _model_instance

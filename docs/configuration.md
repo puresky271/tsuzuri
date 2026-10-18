@@ -61,8 +61,10 @@ See [`examples/custom_cast.json`](../examples/custom_cast.json).
 | `DEVELOPER_DISPLAY_NAME` | — | Overrides `user.name` |
 | `WORLD_TIMEZONE` / `WORLD_TIMEZONE_LABEL` | `UTC` / `UTC` | World-clock zone (IANA key) and its label in prompts |
 | `DEBUG_MOCK_DATE` | — | Pin the world clock (`YYYY-MM-DD[ HH:MM[:SS]]`) |
-| `LLM_MODEL`, `LLM_BASE_URL`, `LLM_API_KEY` | — | OpenAI-compatible endpoint for `openai_compatible()` and internal LLM steps |
-| `EMBEDDING_ENABLED` | off in `Tsuzuri()` unless `embeddings=True` | Dense recall |
+| `LLM_MODEL`, `LLM_BASE_URL`, `LLM_API_KEY` | — | OpenAI-compatible endpoint for `openai_compatible()` and internal LLM steps (consolidation). Ignored while a `Tsuzuri(llm=None)` call runs |
+| `EMBEDDING_ENABLED` | set by `Tsuzuri(embeddings=...)` | Dense recall. Outside the engine, an existing Hugging Face model cache also switches it on unless set to `0` |
+| `MEM_EVOLVE_MIN_SHADOW_DAYS` | `7` | Days after the first consolidation cycle during which evolution only records its plan (set `0` to apply immediately) |
+| `MEM_RETHINK_ALLOW_ARCHIVE` | `0` | `1` enables the management API's (soft) delete and rethink archive actions |
 | `MEMORY_HOST_MODULE` | `tsuzuri_host` | Module whose `register_hooks(register)` installs host hooks (`none` disables) |
 | `TSUZURI_MEMORY_PROVIDER` | `hybrid_v2` | Recall provider (`hybrid_v2`, `biomimetic`) |
 | `MEM_MAINTENANCE_SEEDS_PATH` | `<package>/memory_maintenance_seeds.local.json` | Operator-curated seed memories (never commit) |
@@ -72,7 +74,7 @@ Settings can also live in `$TSUZURI_HOME/tsuzuri.toml` (top-level keys, same nam
 
 ### Feature flags
 
-Flags are read through `secrets_loader.env_bool` (`1/true/yes/on`). The most relevant:
+Most flags are read through `secrets_loader.env_bool` (`1/true/yes/on`); a few older ones (`MEM_RETHINK_ALLOW_ARCHIVE`, the entity flags, `MEM_TURN_TOOLS_*`) only accept `1`, so use `1` everywhere. The most relevant:
 
 | Flag | Default | Effect |
 |---|---|---|
@@ -82,8 +84,8 @@ Flags are read through `secrets_loader.env_bool` (`1/true/yes/on`). The most rel
 | `MEM_ENTITY_REBUILD_ENABLE`, `MEM_ENTITY_BOOST_ENABLE` | off | Entity projection and recall boost |
 | `MEM_FORGETTING_ENABLED` / `MEM_FORGETTING_APPLY` | off / off | Forgetting scan / apply |
 | `MEM_EVIDENCE_MAINTENANCE_APPLY` | off | Evidence pool maintenance writes (dry-run otherwise) |
-| `MEM_TURN_TOOLS_ENABLE` / `_WRITE_ENABLE` | off | Explicit memory tool round |
+| `MEM_TURN_TOOLS_ENABLE` / `_WRITE_ENABLE` | off | Explicit memory tool round (host-level: call `memory_tools` yourself; `Tsuzuri.chat()` does not run it) |
 | `TURN_FACT_SEMANTIC_ENABLE` | on | Semantic channel in the fact workspace (needs embeddings) |
-| `DAILY_CONTINUITY_V2_ENABLED` / `_READ_ENABLED` | on | Cross-day continuity capsules |
+| `DAILY_CONTINUITY_V2_ENABLED` / `_READ_ENABLED` | on | Cross-day continuity capsules (host-level: `chat_compact` produces them; `Tsuzuri.chat()` neither writes nor reads them) |
 
-Forgetting and evidence maintenance default to dry-run. Semantic rethink applies its edits by default once an LLM is configured; every edit is recorded in `memory_rethink_runs` / `memory_rethink_actions` and rewritten rows keep their history. Use shadow mode first if you are evaluating a new model.
+Forgetting and evidence maintenance default to dry-run. Semantic rethink applies its edits once an LLM is configured **and** the agent has canon anchors (`refresh_character_canon`); otherwise it stays in shadow. Archive actions additionally need `MEM_RETHINK_ALLOW_ARCHIVE=1`. Every edit is recorded in `memory_rethink_runs` / `memory_rethink_actions` and rewritten rows keep their history. Use shadow mode first if you are evaluating a new model.

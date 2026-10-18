@@ -194,10 +194,6 @@ def _insert_memory_item(
             (item_id, character, layer, role, "fact", "fact", text,
              salience, confidence, importance, ts, ts, access_count),
         )
-        try:
-            conn.execute("INSERT OR REPLACE INTO memory_items_fts(item_id, text) VALUES (?, ?);", (item_id, text))
-        except Exception:
-            pass
         conn.commit()
     finally:
         conn.close()

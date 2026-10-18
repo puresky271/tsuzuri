@@ -525,11 +525,6 @@ class MemoryApi:
                     "expected_updated_at": compare_version,
                     "actual_updated_at": str((current or {}).get("updated_at", "") or ""),
                 }
-            try:
-                conn.execute("DELETE FROM memory_items_fts WHERE item_id=?;", (iid,))
-                conn.execute("INSERT INTO memory_items_fts(item_id, text) VALUES (?, ?);", (iid, new_text))
-            except Exception:
-                pass
             after = self._snapshot(conn, iid)
             self._write_audit(
                 conn,
@@ -593,10 +588,6 @@ class MemoryApi:
             "UPDATE memory_items SET archived=1, status='archived', updated_at=? WHERE item_id=?;",
             (now, iid),
         )
-        try:
-            conn.execute("DELETE FROM memory_items_fts WHERE item_id=?;", (iid,))
-        except Exception:
-            pass
         after = self._snapshot(conn, iid)
         created = _parse_iso(item.get("created_at", ""))
         age_h = None

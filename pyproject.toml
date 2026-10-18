@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tsuzuri"
-version = "0.1.0"
+version = "0.1.1"
 description = "Long-term conversational memory and a context compiler for multi-agent character chat."
 readme = "README.md"
 license = "Apache-2.0"
@@ -48,7 +48,8 @@ tsuzuri = "tsuzuri.cli:main"
 packages = ["src/tsuzuri"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "docs", "examples", "README*.md", "LICENSE", "NOTICE", "CHANGELOG.md"]
+include = ["src", "tests", "docs", "examples", "README*.md", "LICENSE", "NOTICE", "CHANGELOG.md",
+           "SECURITY.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -58,7 +59,6 @@ filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-extend-exclude = ["src/tsuzuri/memory_core_impl", "tests/core"]
 
 [tool.ruff.lint]
 select = ["E9", "F63", "F7", "F82"]

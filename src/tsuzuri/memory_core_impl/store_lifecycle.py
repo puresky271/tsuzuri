@@ -392,10 +392,6 @@ class _LifecycleMixin:
                             "UPDATE memory_items SET archived=1, status='archived_decayed', updated_at=? WHERE item_id=?",
                             (now_iso, str(r["item_id"])),
                         )
-                        try:
-                            conn.execute("DELETE FROM memory_items_fts WHERE item_id=?", (str(r["item_id"]),))
-                        except Exception:
-                            pass
                         decayed += 1
                 if not dry_run:
                     conn.commit()
@@ -830,8 +826,9 @@ class _LifecycleMixin:
             _api_key = _os_cs.getenv("LLM_API_KEY", "").strip()
             _base_url = _os_cs.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1").strip()
             if not _api_key:
-                # heuristic fallback: 取最常见关键词 + 头一条 text 截断
-                return f"[Cluster of {len(member_items)}] " + str(member_items[0].get("text", ""))[:60]
+                # 无 LLM 不合成 parent（返回空串由 caller 跳过该簇）。旧版把
+                # 「[Cluster of N] + 首条原话」当摘要写进 semantic 层（2026-10-19 审计 LIFE-016）。
+                return ""
             from tsuzuri.llm_client import shared_openai_client
             _client = shared_openai_client(api_key=_api_key, base_url=_base_url, timeout=30)
             _texts = "\n".join(f"- {it.get('text', '')[:100]}" for it in member_items[:8])
@@ -877,7 +874,7 @@ class _LifecycleMixin:
                     flush=True,
                 )
             if not _out:
-                return f"[聚类 {len(member_items)} 条相似事] " + str(member_items[0].get("text", ""))[:60]
+                return ""
             # post-process：去引号 / 句号、硬截断 ≤ 15 汉字（LLM 偶尔违约的兜底）
             _out = _out.strip("「」『』\"'`。.，、 ")
             # 取第一行（防 LLM 多输出）
@@ -886,8 +883,8 @@ class _LifecycleMixin:
                 _out = _out[:15]
             return _fix_user_apology_subject(_out)
         except Exception as _err:
-            _tsz_emit(f"[ClusterSummarize] llm summarizer fallback: {_err}")
-            return f"[聚类 {len(member_items)} 条相似事] " + str(member_items[0].get("text", ""))[:60]
+            _tsz_emit(f"[ClusterSummarize] llm summarizer failed, cluster skipped: {_err}")
+            return ""
 
     def seed_canon_motivations(self, character: str, canon_motivations: list[str]) -> int:
         """Seed initial motivations from character_profiles.motivation_core. Idempotent."""

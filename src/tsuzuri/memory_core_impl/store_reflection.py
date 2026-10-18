@@ -16,6 +16,7 @@ from tsuzuri.memory_core_impl.config import (
 )
 from tsuzuri.memory_core_impl.memory_rows import (
     _lexical_similarity, _memory_working_text_is_ephemeral_noise, _norm_text,
+    _user_text_requests_confidentiality,
 )
 from tsuzuri.memory_core_impl.features import _developer_display_name
 from tsuzuri.memory_core_impl.recall_scoring import _clamp, _json_dumps, _json_loads
@@ -101,6 +102,8 @@ class _ReflectionMixin:
         Fallback 1：从 env 读 LLM 配置自 build OpenAI client（与 kairos_dream.py 风格一致）。
         Fallback 2：fallback_summary（无 LLM 时保守拼接）。
         """
+        # 用户要求保密的 turn 不进 digest（LLM 与规则 fallback 都不可见）
+        turns = [t for t in (turns or []) if not self._cross_char_digest_turn_is_confidential(t)]
         meaningful = [
             t for t in turns
             if not _memory_working_text_is_ephemeral_noise(str(t.get("text", "") or ""))
@@ -197,6 +200,14 @@ class _ReflectionMixin:
 
         # 路径 3：fallback summary
         return self._cross_char_digest_fallback_summary(speaker_char, turns)
+
+    @staticmethod
+    def _cross_char_digest_turn_is_confidential(turn: dict) -> bool:
+        if not isinstance(turn, dict):
+            return False
+        payload = _json_loads(str(turn.get("payload_json", "") or "{}"), {})
+        user_text = str(payload.get("user_text", "") or "") if isinstance(payload, dict) else ""
+        return _user_text_requests_confidentiality(f"{user_text}\n{turn.get('text', '') or ''}")
 
     @staticmethod
     def _cross_char_digest_has_strict_topic_alignment(digest_text: str, candidate_text: str) -> bool:
@@ -1046,6 +1057,8 @@ class _ReflectionMixin:
         week_iso = str(meta.get("week_iso", "") or "")
         subject = str(meta.get("subject", "") or "") or user_name()
         reply_text = str(user_reply_text or "").strip()
+        _user = user_name()
+        _pron = user_pronoun()
 
         # 2) compose LLM prompt
         # process prompt 的核心目标：从反思（+可选 reply）提炼"对用户的画像更新"

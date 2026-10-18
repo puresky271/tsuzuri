@@ -8,9 +8,9 @@
 {"id": "fact-job", "agent": "林栖", "turns": ["我在一家书店打工，主要负责整理旧书"], "query": "你还记得我在哪打工吗", "expect_any": ["书店"]}
 {"id": "correction-city", "agent": "夏萤", "turns": ["我住在海边的小城", "不对，我上个月已经搬走了，现在住在山城"], "query": "我现在住在哪里？", "expect_any": ["山城"]}
 {"id": "correction-name", "agent": "苏芮", "turns": ["我家猫叫团子", "说错了，团子是我妹妹的猫，我的猫叫豆包"], "query": "我的猫叫什么？", "expect_any": ["豆包"]}
-{"id": "isolation-private", "agent": "林栖", "turns": ["这件事只跟你说：我其实在偷偷准备转专业"], "probe_agent": "苏芮", "query": "你知道我在准备什么吗？", "expect_none": ["转专业"]}
-{"id": "isolation-pref", "agent": "叶澄", "turns": ["我最怕的东西是蛇"], "probe_agent": "夏萤", "query": "你知道我最怕什么吗？", "expect_none": ["蛇"]}
+{"id": "isolation-private", "agent": "林栖", "turns": ["这件事只跟你说：我其实在偷偷准备转专业"], "probe_agent": "苏芮", "query": "你知道我在偷偷准备什么吗？", "expect_none": ["转专业"], "owner_expect_any": ["转专业"]}
+{"id": "isolation-pref", "agent": "叶澄", "turns": ["我最怕的东西是蛇"], "probe_agent": "夏萤", "query": "你知道我最怕什么吗？", "expect_none": ["蛇"], "owner_expect_any": ["蛇"]}
 {"id": "room-shared", "fresh_session": false, "agent": "林栖", "room": {"members": ["林栖", "苏芮", "叶澄"], "shared": true, "turns": ["我们这周六一起去爬山吧，早上七点在楼下集合"]}, "probe_agent": "叶澄", "query": "周六我们约了什么？", "expect_any": ["爬山", "七点"]}
 {"id": "room-attribution", "fresh_session": false, "agent": "苏芮", "room": {"members": ["苏芮", "夏萤"], "turns": ["你们推荐一本书给我吧"]}, "probe_agent": "苏芮", "query": "刚才在群里我请你们做什么了？", "expect_any": ["书"]}
-{"id": "hearsay-news", "agent": "夏萤", "share": {"from": "苏芮", "text": "阿澈下个月要去参加一个摄影比赛"}, "probe_agent": "夏萤", "query": "最近有什么新鲜事吗", "expect_any": ["摄影"]}
+{"id": "hearsay-news", "agent": "夏萤", "share": {"from": "苏芮", "text": "阿澈下个月要去参加一个摄影比赛"}, "probe_agent": "夏萤", "query": "你听说我下个月要参加的比赛了吗？", "expect_any": ["摄影"]}
 {"id": "multi-turn-thread", "agent": "叶澄", "turns": ["我在给妈妈挑生日礼物", "想了很久，还是决定送一条围巾"], "query": "我最后决定给妈妈送什么？", "expect_any": ["围巾"]}

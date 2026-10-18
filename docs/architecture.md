@@ -12,23 +12,27 @@ Two seams keep the rings independent of any application: `persona_registry` (who
 
 ## One turn
 
+What `Tsuzuri.chat()` runs (`Tsuzuri.build_messages()` stops before the model call):
+
 ```
 user message
   │
+  ├─ validity review ────── fact_validity.review_current_turn (with llm=)  /  offline_validity_review
+  │                           an explicit self-correction supersedes the earlier claim; long-term
+  │                           rows written from that claim are retired (status "superseded")
   ├─ recall ─────────────── MemoryCoreStore.build_memory_context_pack(agent, text)
-  │                           hybrid candidates (recent, FTS, dense/sparse, structured slots)
+  │                           candidates: recent window, FTS5, LIKE keywords (jieba), dense if enabled
   │                           → unified score (relevance, recency, ACT-R activation, importance)
-  │                           → correction resolution → rerank → entity boost → MMR
+  │                           → correction resolution → entity boost → MMR
   │                           → surface plan (explicit recall / silent grounding / abstain)
   │
-  ├─ fact cards ─────────── select_fact_cards_for_workspace(history, cards)
+  ├─ fact cards ─────────── fact_validity.project_cards → select_fact_cards_for_workspace
   ├─ recent dialogue ────── render_recent_dialogue_window(history)
-  ├─ conversation arc ───── compile_conversation_arc(...)            (reopen / correct / fulfil links)
-  ├─ fact workspace ─────── compile_fact_workspace(text, cards, memory_surface=..., ...)
-  │                           eligibility gate, lexical + optional semantic scoring,
-  │                           supersession by corrections, de-duplication, char budget
-  ├─ state frame ────────── compile_character_state_frame(agent, ...)
-  ├─ execution packet ───── compile_turn_execution_packet(agent, text, ...)
+  ├─ fact workspace ─────── compile_fact_workspace(text, cards, memory_surface=..., gossip_records=...)
+  │                           eligibility gate, lexical scoring, supersession by corrections,
+  │                           de-duplication, char budget; pending hearsay competes here
+  ├─ state frame ────────── the world clock only (see below)
+  ├─ execution packet ───── compile_turn_execution_packet(agent, text, corrections=..., commitments=...)
   └─ assemble ───────────── assemble_workspace_messages(...)          → messages for the model
 
 reply
@@ -38,7 +42,7 @@ reply
         plan_turn_memory_writes → working / episodic / semantic / collective rows
 ```
 
-`Tsuzuri.chat()` runs exactly this; `Tsuzuri.build_messages()` stops before the model call.
+**Host-level compilers.** The library also ships frames the engine does not fill on its own, because they need application state it does not have: `compile_character_state_frame` (rich world/schedule state), `compile_interlocutor_state_frame` (the user's ongoing states), `compile_conversation_arc`, `compile_proactive_continuity_frame`, cluster-memory and on-demand-evidence frames, `memory_tools` (explicit memory tool rounds), the hybrid provider lanes in `memory_provider_hybrid` (dense/sparse/structured, BM25-style sparse and cross-encoder rerank) and the daily-continuity capsule. Call them yourself and pass the results to `assemble_workspace_messages` when your application has that state; with `Tsuzuri.chat()` alone those blocks stay empty.
 
 ### Message order
 
@@ -58,7 +62,9 @@ One SQLite file (`memory.db`) holds:
 
 Session history and fact cards live in JSON files under `sessions/`.
 
-**No hard deletes.** Archiving flips status; forgetting replaces text with a tombstone and keeps provenance. An LLM never writes a row directly: models propose, local code plans, validates and writes.
+`memory_items_fts` is an external-content FTS5 index kept in sync by triggers on `memory_items` (only active, non-empty rows are indexed). Its `unicode61` tokenizer does not segment Chinese, so Chinese keyword recall comes from the jieba + `LIKE` lane; FTS mainly helps space-delimited text.
+
+**Deletion.** Normal operation archives rather than deletes: archiving flips status, forgetting replaces text with a tombstone (the original stays in `payload_json` for provenance), and the management API's delete is a soft delete gated by `MEM_RETHINK_ALLOW_ARCHIVE=1`. Physical `DELETE`s exist only for rolling back rows an evolution or rethink run itself inserted, and for an explicit `drop` operation in an evolution plan. Personal data therefore stays on disk (database, session JSON, audit `before_json`) until you remove the data directory; tsuzuri has no hard-delete/export API yet. An LLM never writes a row directly: models propose, local code plans, validates and writes.
 
 ## Layers
 
@@ -66,13 +72,13 @@ Session history and fact cards live in JSON files under `sessions/`.
 |---|---|---|
 | `working` | compressed recent exchanges | — |
 | `episodic` | events, observations, digests passed between agents | turn writes, cross-agent digests |
-| `semantic` | stable facts, preferences, key events | explicit "remember this", corrections, consolidation |
+| `semantic` | stable facts, preferences, key events | explicit "remember this", corrections, emotionally salient key events, consolidation (rows with salience ≥ `promote_salience_min`, 0.72 by default; ordinary per-turn facts are written at 0.62 and stay episodic by design) |
 | `procedural` | interaction strategies (never surfaced verbatim) | evolution |
 | `collective` | facts shared by the whole cast (`collective_scope`) | multi-member context, shared rooms |
 
 ## Consolidation (`kairos_dream`)
 
-`Tsuzuri.dream(agent)` runs one cycle: freeze evidence → rule-based evolution (promote, merge, decay) → semantic rethink (rewrite / merge / archive / no-change against new evidence, with OOC checks) → evidence maintenance → cross-agent digest → weekly relationship reflection → event/topic clustering with a faithfulness audit → core summary → entity rebuild → forgetting scan. Steps that need an LLM run only when `llm=` is configured; destructive steps default to dry-run (see [configuration](configuration.md)).
+`Tsuzuri.dream(agent)` runs one cycle: freeze evidence → rule-based evolution (promote, merge, decay) → semantic rethink (rewrite / merge / archive / no-change against new evidence, with OOC checks) → evidence maintenance → cross-agent digest → weekly relationship reflection → event/topic clustering with a faithfulness audit → core summary → entity rebuild → forgetting scan. The LLM steps read `LLM_*` settings (environment or `tsuzuri.toml`); an engine built with `llm=None` hides those settings during the call, so the cycle stays offline and the LLM steps are skipped. Evolution starts in **shadow mode**: for the first `MEM_EVOLVE_MIN_SHADOW_DAYS` days (7 by default) after the first cycle it only records what it would promote/merge/decay; set the variable to `0` to apply from the start. Semantic rethink applies changes only when the agent has canon anchors (`MemoryCoreStore.refresh_character_canon`); without them it stays in shadow. Destructive steps default to dry-run (see [configuration](configuration.md)).
 
 ## Multi-party memory
 

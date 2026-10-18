@@ -532,6 +532,13 @@ def _co_strength_load_from_sqlite() -> None:
 
 def _co_strength_persist(a: str, b: str, strength: float) -> None:
     """write-through 到 sqlite。失败时不阻塞、只 log。"""
+    _co_strength_persist_many([(a, b, strength)])
+
+
+def _co_strength_persist_many(entries: list[tuple[str, str, float]]) -> None:
+    """一次连接、一次提交写完一批共现边（召回读路径上不再逐边开连接 + commit）。"""
+    if not entries:
+        return
     store = _get_co_store()
     if store is None:
         return
@@ -540,14 +547,14 @@ def _co_strength_persist(a: str, b: str, strength: float) -> None:
         with store._lock:
             conn = store._connect()
             try:
-                conn.execute(
+                conn.executemany(
                     """INSERT INTO co_occurrence_strength(item_a, item_b, strength, last_updated, update_count)
                        VALUES (?, ?, ?, ?, 1)
                        ON CONFLICT(item_a, item_b) DO UPDATE SET
                          strength=excluded.strength,
                          last_updated=excluded.last_updated,
                          update_count=update_count+1;""",
-                    (a, b, strength, now_iso),
+                    [(a, b, strength, now_iso) for a, b, strength in entries],
                 )
                 conn.commit()
             finally:
@@ -562,9 +569,10 @@ def _get_co_strength(a: str, b: str) -> float:
     return _CO_STRENGTH_CACHE.get(_co_strength_key(a, b), _CO_STRENGTH_DEFAULT)
 
 
-def _hebbian_update(a: str, b: str) -> None:
+def _hebbian_update(a: str, b: str, *, persist: bool = True) -> tuple[str, str, float] | None:
+    """强化一条共现边；persist=False 时只更新 cache，返回待写入的 (a, b, strength)。"""
     if not a or not b or a == b:
-        return
+        return None
     if not _CO_STRENGTH_LOADED:
         _co_strength_load_from_sqlite()
     key = _co_strength_key(a, b)
@@ -572,13 +580,15 @@ def _hebbian_update(a: str, b: str) -> None:
     new = min(0.5, old + _CO_STRENGTH_LR * (1.0 - old))
     _CO_STRENGTH_CACHE[key] = new
     # write-through 到 sqlite（失败静默）
-    _co_strength_persist(key[0], key[1], new)
+    if persist:
+        _co_strength_persist(key[0], key[1], new)
     # LRU eviction
     if len(_CO_STRENGTH_CACHE) > _CO_STRENGTH_MAX_ENTRIES:
         # Remove ~10% oldest entries (insertion-order in Python 3.7+)
         to_remove = list(_CO_STRENGTH_CACHE.keys())[: _CO_STRENGTH_MAX_ENTRIES // 10]
         for k in to_remove:
             _CO_STRENGTH_CACHE.pop(k, None)
+    return (key[0], key[1], new)
 
 
 def _find_co_occurring(top_items: list[dict], all_candidates: list[dict]) -> dict[str, set[str]]:
@@ -679,6 +689,7 @@ def _apply_spreading_activation(candidates: list[dict], boost_factor: float = 0.
     if not activated:
         return
 
+    pending_edges: list[tuple[str, str, float]] = []
     for c in candidates:
         cid = str(c.get("item_id", "") or "")
         if cid in activated:
@@ -686,9 +697,12 @@ def _apply_spreading_activation(candidates: list[dict], boost_factor: float = 0.
             boost = max((_get_co_strength(cid, tid) for tid in top_ids), default=boost_factor)
             c["score"] = float(c.get("score", 0.0) or 0.0) + boost
             c["_spread_activated"] = True
-            # Hebbian learning: strengthen co-retrieval links
+            # Hebbian learning: strengthen co-retrieval links（cache 即时更新，落库按批）
             for tid in top_ids:
-                _hebbian_update(cid, tid)
+                edge = _hebbian_update(cid, tid, persist=False)
+                if edge:
+                    pending_edges.append(edge)
+    _co_strength_persist_many(pending_edges)
 
 
 _LATERAL_INHIBIT_SIM_THRESHOLD = 0.55
