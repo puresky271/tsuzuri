@@ -1,0 +1,315 @@
+{
+  "agents": [
+    "张三",
+    "李四",
+    "王五",
+    "赵六",
+    "钱七"
+  ],
+  "default_agent": "张三",
+  "collective_scope": "测试组",
+  "collective_label": "测试组",
+  "collective_noun": "小组",
+  "aliases": {
+    "张三": [
+      "张三",
+      "zhangsan",
+      "sanzi",
+      "三ちゃん"
+    ],
+    "赵六": [
+      "赵六",
+      "zhaoliu",
+      "liuliu",
+      "ろく"
+    ],
+    "李四": [
+      "李四",
+      "sisi",
+      "lisi",
+      "四ちゃん"
+    ],
+    "王五": [
+      "王五",
+      "wangwu",
+      "wuwu",
+      "五子"
+    ],
+    "钱七": [
+      "钱七",
+      "qianqi",
+      "qiqi",
+      "七ちゃん"
+    ]
+  },
+  "text_variants": {
+    "liuliu": "赵六",
+    "ろくさん": "赵六",
+    "钱七": "钱七"
+  },
+  "collective_keywords": [
+    "测试组",
+    "Masquerade"
+  ],
+  "settings": {
+    "continuity_canonical_key_example": "character:王五:ring_shift",
+    "third_party_example_name": "孙八",
+    "ooc_style_rules": {
+      "max_len": {
+        "李四": 50,
+        "钱七": 35,
+        "王五": 60,
+        "赵六": 80,
+        "张三": 100
+      },
+      "default_max_len": 80,
+      "no_soft": [
+        "王五",
+        "赵六",
+        "钱七"
+      ],
+      "no_cold": [
+        "张三"
+      ],
+      "banned_tone": {
+        "王五": [
+          "啦",
+          "呀",
+          "哦",
+          "呢"
+        ],
+        "钱七": [
+          "啦",
+          "呀",
+          "哦"
+        ]
+      }
+    },
+    "turn_length_budget_tiers": {
+      "张三": {
+        "short": "【本轮长度】这轮轻轻接住就好，≤22 字、最多 2 句。",
+        "normal": "【本轮长度】正常接话，35 字以内、两三句自然说开；不用刻意压短。",
+        "deep": "【本轮长度】这轮值得认真回应，50 字以内把意思说完整；别铺成小作文。"
+      },
+      "赵六": {
+        "short": "【本轮长度】这轮轻轻接住就好，≤24 字、一轮 1-3 句、每句一个想法。",
+        "normal": "【本轮长度】正常接话，1-3 句、30 字上下；不用刻意压短。",
+        "deep": "【本轮长度】这轮值得认真回应，40 字以内把意思说完整；别铺成小作文。"
+      },
+      "李四": {
+        "short": "【本轮长度】这轮轻轻接住就好，≤15 字。",
+        "normal": "【本轮长度】想多说一点时 20-45 字都可以，按触动程度自然决定。",
+        "deep": "【本轮长度】这轮值得认真回应，60 字以内把意思说完整；别铺成小作文。"
+      },
+      "王五": {
+        "short": "【本轮长度】这轮轻轻接住就好，≤18 字、能一句说完就不说两句。",
+        "normal": "【本轮长度】30 字以内、一两句把意思说清；不用刻意压短。",
+        "deep": "【本轮长度】这轮值得认真回应，50 字以内把意思说完整；别铺成小作文。"
+      },
+      "钱七": {
+        "short": "【本轮长度】≤10 字、一句就够。",
+        "normal": "【本轮长度】≤15 字、最多两句。",
+        "deep": "【本轮长度】聊音乐、柠檬茶或重要关系时，15-25 字都可以。"
+      }
+    },
+    "turn_fact_alias_whitelist": [
+      "四四",
+      "七七",
+      "liuliu",
+      "wuwu",
+      "zhangsan",
+      "zhaoliu",
+      "lisi",
+      "wangwu",
+      "qianqi"
+    ],
+    "place_slot_terms": [
+      "北町",
+      "西町"
+    ],
+    "agent_name_guards": {
+      "李四": "(?<![路電电台点開开關关红绿霓虹信号信號街車车尾油壁吊提枱檯桌落聚探花宮宫])李四(?![光火泡籠笼塔具飾饰油罩芯柱串節节會会塲場场])"
+    },
+    "gossip_profiles": {
+      "张三": {
+        "spread_prob": 0.85,
+        "distortion": 0.1
+      },
+      "赵六": {
+        "spread_prob": 0.35,
+        "distortion": 0.05
+      },
+      "李四": {
+        "spread_prob": 0.45,
+        "distortion": 0.15
+      },
+      "王五": {
+        "spread_prob": 0.5,
+        "distortion": 0.05
+      },
+      "钱七": {
+        "spread_prob": 0.2,
+        "distortion": 0.0
+      }
+    },
+    "hobby_terms": [
+      "小组"
+    ],
+    "topic_label_keywords": {
+      "drums": [
+        "鼓",
+        "打球",
+        "练鼓",
+        "球手",
+        "ドラム",
+        "叩く"
+      ],
+      "guitar": [
+        "水彩",
+        "ギター",
+        "弾く",
+        "guitar"
+      ],
+      "bass": [
+        "陶艺",
+        "ベース",
+        "bass"
+      ],
+      "keyboard": [
+        "键盘",
+        "钢琴",
+        "ピアノ",
+        "piano",
+        "キーボード"
+      ],
+      "vocals": [
+        "唱歌",
+        "声乐",
+        "歌声",
+        "vo",
+        "vocals",
+        "ボーカル"
+      ],
+      "session": [
+        "集训",
+        "合训",
+        "リハ",
+        "リハーサル"
+      ],
+      "activity_center": [
+        "活动中心",
+        "ring",
+        "hall",
+        "活动室",
+        "ホール"
+      ],
+      "live_performance": [
+        "演出",
+        "演唱会",
+        "ライブ",
+        "公演",
+        "live",
+        "LIVE"
+      ],
+      "composition": [
+        "写稿",
+        "写曲",
+        "谱曲",
+        "写诗",
+        "编曲",
+        "写诗写稿"
+      ],
+      "song_writing": [
+        "写歌",
+        "创作诗句",
+        "曲を書く",
+        "歌詞"
+      ],
+      "group_dynamics": [
+        "小组",
+        "グループ",
+        "测试组",
+        "Masquerade",
+        "全员",
+        "成员",
+        "group"
+      ],
+      "music_lesson": [
+        "音乐课",
+        "水彩课",
+        "水彩老师",
+        "音楽教室"
+      ]
+    },
+    "topic_labels_vocab": [
+      "drums",
+      "guitar",
+      "bass",
+      "keyboard",
+      "vocals",
+      "session",
+      "live_performance",
+      "composition",
+      "recording",
+      "activity_center",
+      "group_dynamics",
+      "song_writing",
+      "music_lesson"
+    ],
+    "profile_topic_groups": [
+      [
+        "水彩",
+        "画具",
+        "练字",
+        "字帖"
+      ]
+    ],
+    "entity_topic_hints": [
+      "activity_center"
+    ],
+    "agent_full_names": [
+      "张三",
+      "李四",
+      "王五",
+      "赵六",
+      "赵六",
+      "钱七",
+      "钱七"
+    ],
+    "location_tokens": [
+      "ring",
+      "hall"
+    ],
+    "collective_context_keywords": [
+      "集训",
+      "小组",
+      "活动中心",
+      "活动室",
+      "学校",
+      "上课",
+      "放学",
+      "全员",
+      "我们几个"
+    ],
+    "collective_activity_keywords": [
+      "集训",
+      "小组",
+      "活动中心",
+      "活动室"
+    ],
+    "collective_event_keywords": [
+      "集训",
+      "小组",
+      "活动中心",
+      "活动室",
+      "学校",
+      "上课",
+      "放学"
+    ]
+  },
+  "user": {
+    "name": "阿澈",
+    "pronoun": "他",
+    "gender": "男"
+  }
+}

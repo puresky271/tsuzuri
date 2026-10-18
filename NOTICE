@@ -1,0 +1,13 @@
+tsuzuri
+Copyright 2026 tsuzuri contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Design acknowledgements (ideas only; no source code from these projects is included):
+- Letta (formerly MemGPT): sleep-time memory editing and "rethink" of stored facts.
+- mem0: add/update/delete reconciliation of long-term facts.
+- MemoryConstellations: clustering episodes into event and topic narratives.
+- ACT-R (Anderson et al.): activation-based decay used in recall scoring.
+
+Optional model weights downloaded at runtime (for example BAAI bge models via the
+"embeddings" extra) are distributed under their own licenses.
