@@ -105,10 +105,11 @@ def _normalize(raw) -> dict:
 
 
 def _load_cached() -> dict:
-    """Shared, read-only normalized seeds; re-parsed only when (path, mtime) changes."""
+    """Shared, read-only normalized seeds; re-parsed when the path, mtime or size changes."""
     path = maintenance_seeds_path()
     try:
-        mtime = os.path.getmtime(path)
+        st = os.stat(path)
+        mtime = (st.st_mtime_ns, st.st_size)  # size too: coarse timestamps (e.g. Windows) can repeat
     except OSError:
         mtime = None
     key = (path, mtime)
